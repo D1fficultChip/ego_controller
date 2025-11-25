@@ -1,0 +1,219 @@
+行，我给你一版**现在这套工程的“标准完整实验流程 + 指令合集”**，照着做就能从 0 跑到 EGO 接管 PX4 飞。
+
+你可以直接收藏当“说明书”。
+
+---
+
+## 0. 统一约定
+
+* PX4 工程：`~/px4_ws/PX4-Autopilot`
+* MAVROS2 工作区：`~/mavros2_ws`
+* EGO + SO3 + 各种 bridge：`~/egoswarm_ws`
+* ROS2 版本：Humble
+* EGO 已经改好：
+
+  * `single_run_in_sim.launch.py` 里 `odom_topic` 可以传 `/odom_world`
+  * `simulator.launch.py` 里 `init_x_=0, init_y_=0, init_z_=2.0`
+* EGO 自带动力学仿真 **关闭**：`use_dynamic:=false`（只用 PX4+Gazebo 做动力学）
+
+---
+
+## 1. 终端 1：启动 PX4 SITL + Gazebo
+
+```bash
+cd ~/px4_ws/PX4-Autopilot
+make px4_sitl gazebo-classic
+```
+
+* 保持这个终端在前台，看到 `pxh>` 提示符。
+* 后面需要在这里输入 `commander ...` 之类指令。
+
+---
+
+## 2. 终端 2：启动 MAVROS2（带 thrust_scaling）
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/mavros2_ws/install/setup.bash
+
+# 如果你已经配好了 thrust_scaling 的 yaml，用这一条：
+ros2 launch mavros mavros_px4.launch.py \
+  fcu_url:=udp://:14540@localhost:14580 \
+  --ros-args --params-file ~/mavros2_ws/mavros_thrust.yaml
+```
+
+> 如果你暂时没 YAML，也可以先用最基本的：
+>
+> ```bash
+> ros2 launch mavros mavros_px4.launch.py fcu_url:=udp://:14540@localhost:14580
+> ```
+>
+> 但注意这时 `thrust_scaling` 问题可能会再出现。
+
+---
+
+## 3. 终端 3：PX4 → EGO 里程计桥（px4_ego_bridge）
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/mavros2_ws/install/setup.bash
+source ~/egoswarm_ws/install/setup.bash
+
+ros2 run px4_ego_bridge px4_to_ego_odom_bridge
+```
+
+* 启动后应该看到类似：
+
+  ```text
+  Px4ToEgoOdomBridge initialized: /mavros/local_position/odom -> /odom_world, /grid_map/odom
+  ```
+* 没有 QoS warning 就说明 OK。
+
+---
+
+## 4. 终端 4：SO3 控制器（外环）
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/egoswarm_ws/install/setup.bash
+
+ros2 run so3_control so3_control_component_node --ros-args \
+  --remap odom:=/mavros/local_position/odom \
+  --remap imu:=/mavros/imu/data \
+  --remap position_cmd:=/drone_0_planning/pos_cmd \
+  --remap so3_cmd:=/so3_cmd
+```
+
+* 这是改过控制律、加了 offset 对齐、用 PX4 iris 参数的那版。
+* 一会儿第一次收到 EGO 的 `pos_cmd` 时，它会在日志里打你加的 offset 初始化信息。
+
+---
+
+## 5. 终端 5：SO3 → PX4 的桥（px4_so3_bridge）
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/mavros2_ws/install/setup.bash
+source ~/egoswarm_ws/install/setup.bash
+
+ros2 run px4_so3_bridge so3_to_mavros_bridge
+```
+
+* 正常启动时会打印类似：
+
+  ```text
+  [INFO] [..] [so3_to_mavros_bridge]: So3ToMavrosBridge started, mass=1.535, hover_thrust=0.50
+  ```
+
+* 说明：
+
+  * 它会订阅 `/so3_cmd`；
+  * 把 SO3 的四元数塞进 `orientation`；
+  * 把 force 的模长按你标定的 `hover_thrust` 映射到 `thrust`；
+  * 最终发到 `/mavros/setpoint_raw/attitude`。
+
+---
+
+## 6. 终端 6：启动 EGO Planner（用 PX4 的 odom）
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/egoswarm_ws/install/setup.bash
+
+ros2 launch ego_planner single_run_in_sim.launch.py \
+  use_dynamic:=false \
+  odom_topic:=/odom_world
+```
+
+* 这一步会起：
+
+  * 随机场景 / 障碍；
+  * EGO 核心规划节点；
+  * `traj_server`（输出 `/drone_0_planning/pos_cmd`）；
+  * **不会再起 EGO 自己的 so3_quadrotor_simulator**（动力学完全交给 PX4+Gazebo）。
+
+---
+
+## 7. 起飞 & 交给 EGO+SO3 的“推荐流程”
+
+在 **PX4 那个终端（有 `pxh>` 的）** 中：
+
+1. **解锁 + 自主起飞到 2m：**
+
+   ```text
+   pxh> commander arm
+   pxh> commander takeoff 2
+   ```
+
+   等飞机在 Gazebo 里稳定到大约 2m 高、姿态不再明显乱晃。
+
+2. **切到 Offboard，让 EGO+SO3 接管：**
+
+   ```text
+   pxh> commander mode offboard
+   ```
+
+   此时，链路变为：
+
+   `/odom_world`(PX4) → EGO → `/drone_0_planning/pos_cmd`
+   → SO3(+offset) → `/so3_cmd`
+   → px4_so3_bridge → `/mavros/setpoint_raw/attitude` → PX4
+
+   你应该看到：
+
+   * 飞机继续保持飞行，不会瞬间翻车；
+   * 开始按照 EGO 规划的路线在障碍环境中运动。
+
+---
+
+## 8. 调试用的几个常用命令（可选）
+
+找个空终端，用来观察话题：
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/mavros2_ws/install/setup.bash
+source ~/egoswarm_ws/install/setup.bash
+```
+
+1. 看状态链是否通：
+
+```bash
+ros2 topic hz /mavros/local_position/odom
+ros2 topic hz /odom_world
+```
+
+2. 看规划 & 控制链是否通：
+
+```bash
+ros2 topic hz /drone_0_planning/pos_cmd
+ros2 topic hz /so3_cmd
+ros2 topic hz /mavros/setpoint_raw/attitude
+```
+
+3. 看实际发给 PX4 的姿态 setpoint 和油门：
+
+```bash
+ros2 topic echo /mavros/setpoint_raw/attitude
+```
+
+---
+
+## 9. RViz 观察（可选）
+
+```bash
+rviz2
+```
+
+可以这样配：
+
+* **Fixed Frame**：`world` 或 `map`（根据你 bridge 里设的 frame_id）
+* 添加：
+
+  * 一个 `Odometry` 显示 `/odom_world`（PX4 实际位置）；
+  * 一个 `Path` / `Marker` 显示 EGO 轨迹（例如 `/drone_0_planning/bspline` 或你已有的可视化话题）。
+
+---
+
+你现在就按这个“6 个终端 + 1 套 pxh 命令”的流程跑一遍，就算是“最新标准实验流程”。
+以后有任何改动（比如改 launch、参数），我们再在这套模板基础上微调。

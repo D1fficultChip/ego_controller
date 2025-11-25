@@ -1,0 +1,23 @@
+# --- ROS 2 核心忽略项 ---
+build/
+install/
+log/
+devel/
+
+# --- Python 编译缓存 ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- IDE 配置文件 (可选，如果你不想上传 vscode 配置) ---
+.vscode/
+.idea/
+
+# --- 系统文件 ---
+.DS_Store
+*~
+*.swp
+
+# --- 临时文件 ---
+*.bag
+*.pcd
