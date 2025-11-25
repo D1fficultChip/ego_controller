@@ -15,13 +15,17 @@ def generate_launch_description():
     depth_topic = LaunchConfiguration('depth_topic', default='depth_image')
     cloud_topic = LaunchConfiguration('cloud_topic', default='cloud')
     
+    # 适配 Iris 携带的 Realsense/Kinect 仿真参数 (通常 640x480)
     cx = LaunchConfiguration('cx', default=321.04638671875)
     cy = LaunchConfiguration('cy', default=243.44969177246094)
     fx = LaunchConfiguration('fx', default=387.229248046875)
     fy = LaunchConfiguration('fy', default=387.229248046875)
     
-    max_vel = LaunchConfiguration('max_vel', default=2.0)
-    max_acc = LaunchConfiguration('max_acc', default=3.0)
+    # === [修改 1] 动力学参数：配合 Iris 的稳定性，默认值稍微保守一点 ===
+    # 如果控制器还没调完美，规划慢一点可以减少抖动
+    max_vel = LaunchConfiguration('max_vel', default=1.5) # 原 2.0
+    max_acc = LaunchConfiguration('max_acc', default=2.5) # 原 3.0
+    
     planning_horizon = LaunchConfiguration('planning_horizon', default=7.5)
     
     point_num = LaunchConfiguration('point_num', default=1)
@@ -93,7 +97,7 @@ def generate_launch_description():
         name=['drone_', drone_id, '_ego_planner_node'],
         output='screen',
         remappings=[
-            ('odom_world', ['drone_', drone_id, '_', odometry_topic]),
+            ('odom_world', odometry_topic),
             ('planning/bspline', ['drone_', drone_id, '_planning/bspline']),
             ('planning/data_display', ['drone_', drone_id, '_planning/data_display']),
             ('planning/broadcast_bspline_from_planner', '/broadcast_bspline'),
@@ -113,8 +117,8 @@ def generate_launch_description():
         ],
         parameters=[
             {'fsm/flight_type': flight_type},
-            {'fsm/thresh_replan_time': 1.0},
-            {'fsm/thresh_no_replan_meter': 1.0},
+            {'fsm/thresh_replan_time': 0.5},
+            {'fsm/thresh_no_replan_meter': 0.3},
             {'fsm/planning_horizon': planning_horizon},
             {'fsm/planning_horizen_time': 3.0},
             {'fsm/emergency_time': 1.0},
@@ -145,7 +149,8 @@ def generate_launch_description():
             {'grid_map/local_update_range_x': 5.5},
             {'grid_map/local_update_range_y': 5.5},
             {'grid_map/local_update_range_z': 4.5},
-            {'grid_map/obstacles_inflation': 0.099},
+            # === [修改 2] 膨胀半径：Iris 半径约0.25m-0.3m，设置为0.4m以确保安全 ===
+            {'grid_map/obstacles_inflation': 0.4}, 
             {'grid_map/local_map_margin': 10},
             {'grid_map/ground_height': -0.01},
             # camera parameter
@@ -185,12 +190,14 @@ def generate_launch_description():
             {'manager/use_distinctive_trajs': use_distinctive_trajs},
             {'manager/drone_id': drone_id},
             # Trajectory optimization parameters
-            {'optimization/lambda_smooth': 1.0},
+            {'optimization/lambda_smooth': 8.0},
             {'optimization/lambda_collision': 0.5},
             {'optimization/lambda_feasibility': 0.1},
             {'optimization/lambda_fitness': 1.0},
-            {'optimization/dist0': 0.5},
-            {'optimization/swarm_clearance': 0.5},
+            # === [修改 3] 安全距离：确保避障优化时保持足够距离 ===
+            {'optimization/dist0': 0.5}, 
+            # === [修改 4] 集群间距：Iris 较大，必须增大间距，否则多机互撞 ===
+            {'optimization/swarm_clearance': 0.8}, 
             {'optimization/max_vel': max_vel},
             {'optimization/max_acc': max_acc},
 

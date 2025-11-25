@@ -77,9 +77,9 @@ void SO3Control::calculateControl(const Eigen::Vector3d &des_pos,
   if (flag_use_acc)
     force_.noalias() += mass_ * ka.asDiagonal() * (des_acc - acc_) + mass_ * (des_acc);
 
-  // Limit control angle to 45 degree
-  // 限制了控制力的最大倾斜角度，确保控制力不会产生超过 45 度的角度
-  double theta = M_PI / 4;
+  // Limit control angle to 36 degree
+  // 限制了控制力的最大倾斜角度，确保控制力不会产生超过 36 度的角度
+  double theta = M_PI / 5;
   double c = cos(theta);
   Eigen::Vector3d f;
   f.noalias() = force_ - mass_ * g_ * Eigen::Vector3d(0, 0, 1);

@@ -194,12 +194,11 @@ void SO3ControlComponent::odom_callback(const nav_msgs::msg::Odometry::ConstPtr 
     double roll, pitch, yaw;
     tf2::Matrix3x3(quat).getRPY(roll, pitch, yaw);
 
-    // === 关键：更新全局当前状态 ===
+// === 关键：更新全局当前状态 ===
     g_current_yaw = yaw;
     g_current_pos = position;
     g_has_odom    = true;
 
-    // 保留原控制器状态更新逻辑
     controller_.setPosition(position);
     controller_.setVelocity(velocity);
 
@@ -209,13 +208,22 @@ void SO3ControlComponent::odom_callback(const nav_msgs::msg::Odometry::ConstPtr 
             publishSO3Command();
         position_cmd_updated_ = false;
     }
-    else if (init_z_ > -9999.0)
+    // ============== 修改开始 ==============
+    else 
     {
-        des_pos_ = Eigen::Vector3d(init_x_, init_y_, init_z_);
+        // 如果还没收到规划器的指令，就自动锁定在当前位置悬停！
+        // 不再依赖 init_z_ 参数，防止参数没设导致坠机
+        des_pos_ = position;  // <--- 核心修改：目标位置 = 当前位置
         des_vel_ = Eigen::Vector3d(0, 0, 0);
         des_acc_ = Eigen::Vector3d(0, 0, 0);
+        
+        // 保持当前的 Yaw，别乱转
+        des_yaw_ = current_yaw_; 
+        des_yaw_dot_ = 0.0;
+        
         publishSO3Command();
     }
+    // ============== 修改结束 ==============
 }
 
 
@@ -256,23 +264,30 @@ void SO3ControlComponent::onInit(void)
 
     declare_parameter("use_external_yaw", true);
     // 姿态环 kR
-    declare_parameter("gains/rot/x", 1.05);
-    declare_parameter("gains/rot/y", 1.09);
-    declare_parameter("gains/rot/z", 0.90);
+ // === 2. 姿态环 (Inner Loop) - 必须够硬才能执行外环指令 ===
+    // 现在的参数 (1.05/1.09) 对于 Iris 来说稍显偏软，导致姿态响应慢
+    // 建议适度提高 kR，让飞机姿态锁定更紧
+    declare_parameter("gains/rot/x", 1.5); // 原 1.05 -> 提高响应速度
+    declare_parameter("gains/rot/y", 1.5); // 原 1.09
+    declare_parameter("gains/rot/z", 0.9); // 原 0.90 -> 增强偏航锁定
 
-    // 姿态环 kΩ
-    declare_parameter("gains/ang/x", 0.32);
-    declare_parameter("gains/ang/y", 0.33);
-    declare_parameter("gains/ang/z", 0.41);
+    // 角速度增益 kΩ 通常配合 kR 调整，保持阻尼比
+    // 原来的 0.32 偏低，容易在快速旋转后产生过冲（震荡）
+    declare_parameter("gains/ang/x", 0.22); // 原 0.32 -> 稍微降低以减少高频噪声
+    declare_parameter("gains/ang/y", 0.22); // 原 0.33
+    declare_parameter("gains/ang/z", 0.25); // 原 0.41
 
-    // 位置环 Kx / Kv（外环）
-    declare_parameter("gains/kx/x", 3.5);
-    declare_parameter("gains/kx/y", 3.5);
-    declare_parameter("gains/kx/z", 6.1);
+    // === 3. 位置环 (Outer Loop) - 解决“偏差大” ===
+    // 之前的 3.5 太软了，导致跟踪误差大。这里大幅提升刚度。
+    declare_parameter("gains/kx/x", 4.5); // 原 3.5 -> 5.5 (强力拉回轨迹)
+    declare_parameter("gains/kx/y", 4.5); 
+    declare_parameter("gains/kx/z", 7.0); // 原 6.1 -> 8.0 (死锁高度，防掉高)
 
-    declare_parameter("gains/kv/x", 4.6);
-    declare_parameter("gains/kv/y", 4.6);
-    declare_parameter("gains/kv/z", 6.1);
+    // === 4. 速度环 (Damping) - 消除“过冲” ===
+    // 配合提升的 Kx，Kv 也要相应跟上，但不要太大以免拖慢系统
+    declare_parameter("gains/kv/x", 3.8); // 原 3.6 -> 3.8 (配合 Kx=5.5)
+    declare_parameter("gains/kv/y", 3.8);
+    declare_parameter("gains/kv/z", 4.5); // 原 6.1 -> 4.5 (Z轴不需要那么大的阻尼)
 
 
     declare_parameter("corrections/z", 0.0);

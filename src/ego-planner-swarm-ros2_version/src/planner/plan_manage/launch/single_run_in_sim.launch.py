@@ -46,15 +46,15 @@ def generate_launch_description():
         parameters=[
             {'map/x_size': 26.0},
             {'map/y_size': 20.0},
-            {'map/z_size': 3.0},
+            {'map/z_size': 5.0},
             {'map/resolution': 0.1},
             {'ObstacleShape/seed': 1.0},
-            {'map/obs_num': 20},
+            {'map/obs_num': 50},
             {'ObstacleShape/lower_rad': 0.5},
             {'ObstacleShape/upper_rad': 0.7},
             {'ObstacleShape/lower_hei': 0.0},
             {'ObstacleShape/upper_hei': 3.0},
-            {'map/circle_num': 20},
+            {'map/circle_num': 50},
             {'ObstacleShape/radius_l': 0.7},
             {'ObstacleShape/radius_h': 0.5},
             {'ObstacleShape/z_l': 0.7},
@@ -110,27 +110,43 @@ def generate_launch_description():
             'cy': str(243.44969177246094),
             'fx': str(387.229248046875),
             'fy': str(387.229248046875),
-            'max_vel': str(1.0),    
-            'max_acc': str(2.0),
+            'max_vel': str(0.5),    
+            'max_acc': str(1.0),
             'planning_horizon': str(7.5),
             'use_distinctive_trajs': 'True',
-            'flight_type': str(1),
-            'point_num': str(4),
-            'point0_x': str(13.0),
-            'point0_y': str(0.0),
-            'point0_z': str(2.0),
+            'flight_type': str(2),  # 必须是 2 才能跑序列点
+            'point_num': str(6),    # 这里设置总共有 8 个点
             
-            'point1_x': str(13.0),
-            'point1_y': str(5.0),
-            'point1_z': str(2.0),
+            # --- 第1阶段：S型前进 ---
+            # 点0: 向右前方飞
+            'point0_x': str(5.0),
+            'point0_y': str(-4.0),
+            'point0_z': str(1.5),
             
-            'point2_x': str(0.0),
-            'point2_y': str(5.0),
-            'point2_z': str(2.0),
+            # 点1: 穿插到左前方 (测试偏航Yaw跟随)
+            'point1_x': str(10.0),
+            'point1_y': str(4.0),
+            'point1_z': str(1.2),
             
-            'point3_x': str(0.0),
-            'point3_y': str(0.0),
-            'point3_z': str(2.0),
+            # 点2: 再穿插到更远的右侧，同时爬升 (测试三轴联动)
+            'point2_x': str(15.0),
+            'point2_y': str(-2.0),
+            'point2_z': str(1.5), # 升高到 2.0m
+            
+            # --- 第2阶段：掉头回程 ---
+            # 点3: 也就是最远端左侧，准备掉头
+            'point3_x': str(15.0),
+            'point3_y': str(-6.0),
+            'point3_z': str(1.5),
+            
+            # 点4: 回到原点 (Home)
+            'point4_x': str(6.0),
+            'point4_y': str(-2.0),
+            'point4_z': str(1.0),
+
+            'point5_x': str(0.0),
+            'point5_y': str(0.0),
+            'point5_z': str(1.0),
             
         }.items()
     )
@@ -166,8 +182,55 @@ def generate_launch_description():
         }.items()
     )
     
+    # ==========================================
+    # [补丁] 恢复感知能力 (让规划器看见障碍)
+    # ==========================================
+    # 根据 simulator.launch.py 提取的配置
+    # 注意：package 是 local_sensing
+    pcl_render_node = Node(
+        package='local_sensing', 
+        executable='pcl_render_node',
+        name=['drone_', drone_id, '_pcl_render_node'],
+        output='screen',
+        parameters=[
+            # 这里的参数要配合你 advanced_param 里的配置
+            {'sensing_horizon': 5.0},
+            {'sensing_rate': 30.0},
+            {'estimation_rate': 30.0},
+            
+            # 地图尺寸传进去
+            {'map/x_size': map_size_x},
+            {'map/y_size': map_size_y},
+            {'map/z_size': map_size_z},
+            
+            # 相机内参 (Iris 默认)
+            {'camera/cx': 321.04638671875},
+            {'camera/cy': 243.44969177246094},
+            {'camera/fx': 387.229248046875},
+            {'camera/fy': 387.229248046875},
+        ],
+        remappings=[
+            # 输入：上帝视角的全局地图
+            ('global_map', '/map_generator/global_cloud'),
+            
+            # 输入：真实 Odom (这里要直连 /odom_world，去掉 simulator 里的前缀逻辑)
+            ('odometry', odom_topic), 
+            
+            # 输出：局部点云 (必须和 ego_planner 接收的话题一致)
+            # 注意：advanced_param 里如果没改，这里可能要拼前缀，
+            # 但如果你刚才把 advanced_param 改成了直连，这里就最好也直连：
+            ('pcl_render_node/cloud', 'pcl_render_node/cloud'),
+            
+            # 深度图 (可选)
+            ('depth', 'pcl_render_node/depth')
+        ]
+    )
+    
+    # 别忘了加进去
+
+
     ld = LaunchDescription()
-        
+    ld.add_action(pcl_render_node)   
     ld.add_action(map_size_x_cmd)
     ld.add_action(map_size_y_cmd)
     ld.add_action(map_size_z_cmd)
