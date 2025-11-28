@@ -279,9 +279,9 @@ void SO3ControlComponent::onInit(void)
 
     // === 3. 位置环 (Outer Loop) - 解决“偏差大” ===
     // 之前的 3.5 太软了，导致跟踪误差大。这里大幅提升刚度。
-    declare_parameter("gains/kx/x", 4.5); // 原 3.5 -> 5.5 (强力拉回轨迹)
-    declare_parameter("gains/kx/y", 4.5); 
-    declare_parameter("gains/kx/z", 7.0); // 原 6.1 -> 8.0 (死锁高度，防掉高)
+    declare_parameter("gains/kx/x", 3.); // 原 3.5 -> 5.5 (强力拉回轨迹)
+    declare_parameter("gains/kx/y", 3.5); 
+    declare_parameter("gains/kx/z", 5.1); // 原 6.1 -> 8.0 (死锁高度，防掉高)
 
     // === 4. 速度环 (Damping) - 消除“过冲” ===
     // 配合提升的 Kx，Kv 也要相应跟上，但不要太大以免拖慢系统

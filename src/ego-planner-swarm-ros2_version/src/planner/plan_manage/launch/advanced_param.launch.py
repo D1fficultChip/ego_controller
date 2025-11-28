@@ -114,6 +114,7 @@ def generate_launch_description():
             ('grid_map/pose', ['drone_', drone_id, '_', camera_pose_topic]),
             ('grid_map/depth', ['drone_', drone_id, '_', depth_topic]),
             ('grid_map/occupancy_inflate', ['drone_', drone_id, '_grid/grid_map/occupancy_inflate'])
+            
         ],
         parameters=[
             {'fsm/flight_type': flight_type},
@@ -159,7 +160,7 @@ def generate_launch_description():
             {'grid_map/fx': fx},
             {'grid_map/fy': fy},
             # depth filter
-            {'grid_map/use_depth_filter': True},
+            {'grid_map/use_depth_filter': False},
             {'grid_map/depth_filter_tolerance': 0.15},
             {'grid_map/depth_filter_maxdist': 5.0},
             {'grid_map/depth_filter_mindist': 0.2},
@@ -178,7 +179,7 @@ def generate_launch_description():
             {'grid_map/virtual_ceil_height': 2.9},
             {'grid_map/visualization_truncate_height': 1.8},
             {'grid_map/show_occ_time': False},
-            {'grid_map/pose_type': 1},
+            {'grid_map/pose_type': 2},
             {'grid_map/frame_id': "world"},
             # planner manager
             {'manager/max_vel': max_vel},
@@ -190,8 +191,8 @@ def generate_launch_description():
             {'manager/use_distinctive_trajs': use_distinctive_trajs},
             {'manager/drone_id': drone_id},
             # Trajectory optimization parameters
-            {'optimization/lambda_smooth': 8.0},
-            {'optimization/lambda_collision': 0.5},
+            {'optimization/lambda_smooth': 5.0},
+            {'optimization/lambda_collision': 2.0},
             {'optimization/lambda_feasibility': 0.1},
             {'optimization/lambda_fitness': 1.0},
             # === [修改 3] 安全距离：确保避障优化时保持足够距离 ===

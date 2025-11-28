@@ -21,7 +21,7 @@ void GridMap::initMap(rclcpp::Node::SharedPtr node)
   node_->declare_parameter("grid_map/fy", -1.0);
   node_->declare_parameter("grid_map/cx", -1.0);
   node_->declare_parameter("grid_map/cy", -1.0);
-  node_->declare_parameter("grid_map/use_depth_filter", true);
+  node_->declare_parameter("grid_map/use_depth_filter", false);
   node_->declare_parameter("grid_map/depth_filter_tolerance", -1.0);
   node_->declare_parameter("grid_map/depth_filter_maxdist", -1.0);
   node_->declare_parameter("grid_map/depth_filter_mindist", -1.0);
@@ -40,7 +40,7 @@ void GridMap::initMap(rclcpp::Node::SharedPtr node)
   node_->declare_parameter("grid_map/virtual_ceil_yp", -0.1);
   node_->declare_parameter("grid_map/virtual_ceil_yn", -0.1);
   node_->declare_parameter("grid_map/show_occ_time", false);
-  node_->declare_parameter("grid_map/pose_type", 1);
+  node_->declare_parameter("grid_map/pose_type", 2);
   node_->declare_parameter("grid_map/frame_id", "world");
   node_->declare_parameter("grid_map/local_map_margin", 1);
   node_->declare_parameter("grid_map/ground_height", 1.0);

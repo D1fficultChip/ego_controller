@@ -431,7 +431,7 @@ ros2 run px4_ego_bridge px4_to_ego_odom_bridge
 
 
 
-ros2 param set /mavros/setpoint_raw thrust_scaling 2.0
+ros2 param set /mavros/setpoint_raw thrust_scaling 1.0
 
 
 ros2 param set /mavros/setpoint_raw thrust_scaling 2.0
@@ -446,3 +446,49 @@ ros2 run px4_so3_bridge so3_to_mavros_bridge
 
 
 ros2 launch ego_planner single_run_in_sim.launch.py   use_dynamic:=false   odom_topic:=odom_world
+            # === 关键修改：启用航点模式并增加点数 ===
+            'flight_type': str(2),  # 必须是 2 才能跑序列点
+            'point_num': str(8),    # 这里设置总共有 8 个点
+            
+            # --- 第1阶段：S型前进 ---
+            # 点0: 向右前方飞
+            'point0_x': str(5.0),
+            'point0_y': str(-4.0),
+            'point0_z': str(1.5),
+            
+            # 点1: 穿插到左前方 (测试偏航Yaw跟随)
+            'point1_x': str(10.0),
+            'point1_y': str(4.0),
+            'point1_z': str(1.5),
+            
+            # 点2: 再穿插到更远的右侧，同时爬升 (测试三轴联动)
+            'point2_x': str(15.0),
+            'point2_y': str(-4.0),
+            'point2_z': str(2.5), # 升高到 2.5m
+            
+            # --- 第2阶段：掉头回程 ---
+            # 点3: 也就是最远端左侧，准备掉头
+            'point3_x': str(15.0),
+            'point3_y': str(4.0),
+            'point3_z': str(2.5),
+            
+            # 点4: 飞回中心点
+            'point4_x': str(7.5),
+            'point4_y': str(0.0),
+            'point4_z': str(2.0),
+            
+            # --- 第3阶段：大范围绕圈回家 ---
+            # 点5: 左后方角落，开始下降
+            'point5_x': str(0.0),
+            'point5_y': str(6.0),
+            'point5_z': str(1.5),
+            
+            # 点6: 右后方角落 (横穿起飞点后方)
+            'point6_x': str(0.0),
+            'point6_y': str(-6.0),
+            'point6_z': str(1.5),
+
+            # 点7: 回到原点 (Home)
+            'point7_x': str(0.0),
+            'point7_y': str(0.0),
+            'point7_z': str(1.5),

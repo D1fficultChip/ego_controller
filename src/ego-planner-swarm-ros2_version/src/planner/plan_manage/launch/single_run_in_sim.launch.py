@@ -44,24 +44,24 @@ def generate_launch_description():
         name='random_forest',
         output='screen',
         parameters=[
-            {'map/x_size': 26.0},
-            {'map/y_size': 20.0},
+            {'map/x_size': 50.0},
+            {'map/y_size': 40.0},
             {'map/z_size': 5.0},
             {'map/resolution': 0.1},
             {'ObstacleShape/seed': 1.0},
-            {'map/obs_num': 50},
-            {'ObstacleShape/lower_rad': 0.5},
-            {'ObstacleShape/upper_rad': 0.7},
+            {'map/obs_num': 30},
+            {'ObstacleShape/lower_rad': 0.4}, # 原 0.3
+            {'ObstacleShape/upper_rad': 0.8}, # 原 0.6
             {'ObstacleShape/lower_hei': 0.0},
             {'ObstacleShape/upper_hei': 3.0},
-            {'map/circle_num': 50},
-            {'ObstacleShape/radius_l': 0.7},
-            {'ObstacleShape/radius_h': 0.5},
+            {'map/circle_num': 30},
+            {'ObstacleShape/radius_l': 1.5},
+            {'ObstacleShape/radius_h': 1.8},
             {'ObstacleShape/z_l': 0.7},
-            {'ObstacleShape/z_h': 0.8},
+            {'ObstacleShape/z_h': 1.5},
             {'ObstacleShape/theta': 0.5},
             {'pub_rate': 1.0},
-            {'min_distance': 0.8}
+            {'min_distance': 3.0}
         ],
         condition = UnlessCondition(use_mockamap)
     )
@@ -115,38 +115,31 @@ def generate_launch_description():
             'planning_horizon': str(7.5),
             'use_distinctive_trajs': 'True',
             'flight_type': str(2),  # 必须是 2 才能跑序列点
-            'point_num': str(6),    # 这里设置总共有 8 个点
+            'point_num': str(4),    # 这里设置总共有 8 个点
             
-            # --- 第1阶段：S型前进 ---
-            # 点0: 向右前方飞
+# --- 第1阶段：东向直行建立速度 (Heading 0°) ---
+            # 矢量: (-5 -> 5, -4) 纯东方向
             'point0_x': str(5.0),
             'point0_y': str(-4.0),
             'point0_z': str(1.5),
             
-            # 点1: 穿插到左前方 (测试偏航Yaw跟随)
-            'point1_x': str(10.0),
-            'point1_y': str(4.0),
-            'point1_z': str(1.2),
+            # --- 第2阶段：东北切角 (Heading 45°) ---
+            # 矢量: (3, 3) 变化45度
+            'point1_x': str(15.0),
+            'point1_y': str(-1.0),
+            'point1_z': str(1.5),
             
-            # 点2: 再穿插到更远的右侧，同时爬升 (测试三轴联动)
+            # --- 第3阶段：正北爬升 (Heading 90°) ---
+            # 矢量: (0, 2) 变化45度
             'point2_x': str(15.0),
-            'point2_y': str(-2.0),
-            'point2_z': str(1.5), # 升高到 2.0m
+            'point2_y': str(-10.0),
+            'point2_z': str(1.5), # 爬升至 2.0m
             
-            # --- 第2阶段：掉头回程 ---
-            # 点3: 也就是最远端左侧，准备掉头
-            'point3_x': str(15.0),
-            'point3_y': str(-6.0),
-            'point3_z': str(1.5),
+            # 矢量: (-3, 3) 变化45度
+            'point3_x': str(0.0),
+            'point3_y': str(-10.0),
+            'point3_z': str(1.8),
             
-            # 点4: 回到原点 (Home)
-            'point4_x': str(6.0),
-            'point4_y': str(-2.0),
-            'point4_z': str(1.0),
-
-            'point5_x': str(0.0),
-            'point5_y': str(0.0),
-            'point5_z': str(1.0),
             
         }.items()
     )
@@ -182,50 +175,50 @@ def generate_launch_description():
         }.items()
     )
     
+# ==========================================
+    # [补丁] 恢复感知能力 (修正版)
     # ==========================================
-    # [补丁] 恢复感知能力 (让规划器看见障碍)
-    # ==========================================
-    # 根据 simulator.launch.py 提取的配置
-    # 注意：package 是 local_sensing
     pcl_render_node = Node(
         package='local_sensing', 
         executable='pcl_render_node',
         name=['drone_', drone_id, '_pcl_render_node'],
         output='screen',
         parameters=[
-            # 这里的参数要配合你 advanced_param 里的配置
-            {'sensing_horizon': 5.0},
-            {'sensing_rate': 30.0},
-            {'estimation_rate': 30.0},
-            
-            # 地图尺寸传进去
+            {'sensing_horizon': 3.0},
+            {'sensing_rate': 7.0},
+            {'estimation_rate': 7.0},
             {'map/x_size': map_size_x},
             {'map/y_size': map_size_y},
             {'map/z_size': map_size_z},
-            
-            # 相机内参 (Iris 默认)
+            {'grid_map/resolution': 0.1},
+            {'grid_map/local_update_range_x': 5.5},
+            {'grid_map/local_update_range_y': 5.5},
+            {'grid_map/local_update_range_z': 4.5},
+            {'grid_map/obstacles_inflation': 0.4},
             {'camera/cx': 321.04638671875},
             {'camera/cy': 243.44969177246094},
             {'camera/fx': 387.229248046875},
             {'camera/fy': 387.229248046875},
         ],
         remappings=[
-            # 输入：上帝视角的全局地图
             ('global_map', '/map_generator/global_cloud'),
+            ('odometry', odom_topic),
             
-            # 输入：真实 Odom (这里要直连 /odom_world，去掉 simulator 里的前缀逻辑)
-            ('odometry', odom_topic), 
+            # 这里的 cloud 可以不接了，或者留着给 RViz 看
+            ('pcl_render_node/cloud', ['drone_', drone_id, '_pcl_render_node/cloud']),
             
-            # 输出：局部点云 (必须和 ego_planner 接收的话题一致)
-            # 注意：advanced_param 里如果没改，这里可能要拼前缀，
-            # 但如果你刚才把 advanced_param 改成了直连，这里就最好也直连：
-            ('pcl_render_node/cloud', 'pcl_render_node/cloud'),
-            
-            # 深度图 (可选)
-            ('depth', 'pcl_render_node/depth')
+            # === 🔴 关键：把深度图接通 ===
+            # 必须加上前缀，因为 advanced_param 默认就在听 drone_0_pcl_render_node/depth
+            ('depth', ['drone_', drone_id, '_pcl_render_node/depth']) 
         ]
     )
-    
+    tf_body_camera = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        # 意思：相机装在机身中心
+        arguments=['0.0', '0', '0', '0', '0', '0', 'base_link', 'camera_link']
+    )
+
     # 别忘了加进去
 
 
@@ -239,7 +232,7 @@ def generate_launch_description():
     ld.add_action(drone_id_cmd)
     ld.add_action(use_dynamic_cmd)
     ld.add_action(use_mockamap_cmd)
-
+    ld.add_action(tf_body_camera)
     # 添加 Map Generator 节点
     ld.add_action(map_generator_node)
     ld.add_action(mockamap_node)
